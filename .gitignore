@@ -1,0 +1,17 @@
+# macOS
+.DS_Store
+
+# Node / Electron
+node_modules/
+dist/
+out/
+release/
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Editor
+.vscode/
+.idea/
