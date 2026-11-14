@@ -16,22 +16,49 @@
 
 ```
                          ┌──────────┐
-                         │  users   │  ← 모든 것의 중심
+                         │  users   │
                          └────┬─────┘
           ┌───────────────────┼───────────────────┐
           ▼                   ▼                   ▼
    ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-   │ ① 질문·답변  │     │ ② 일상 기록  │     │   ④ 펫      │
-   └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-          │                   │                   │
-          └─────────┬─────────┘                   │
-                    ▼                             │
-             ┌─────────────┐     기록이 생기면       │
-             │ ③ 퇴사각 점수 │     경험치 지급 ────────┘
-             └─────────────┘
+   │ ① 질문·답변  │     │ ② 일상 기록    │     │   ④ 펫      │
+   └──────┬──────┘     └──┬───────▲──┘     └──────▲──────┘
+          │               │       │               │
+          └───────┬───────┘       │               │
+                  ▼               │               │
+           ┌─────────────┐        │               │
+           │ ③ 퇴사각 점수 │────────┘               │
+           └─────────────┘                        │
+            기록이 생기면 경험치 지급 ──────────────────┘
 
-   [콘텐츠: 관리자가 만듦]  질문 목록 · 펫 종류 · 대사 · 행동 규칙 · 이벤트
-   [⑤ 관리자]             관리자 명단 · 감사 로그
+   [⑤ 관리자]  관리자 명단 · 감사 로그
+```
+
+| 화살표 | 의미 |
+| --- | --- |
+| ①② → ③ | 답변과 하루 기록으로 퇴사각 점수를 계산 |
+| ③ → ② | 계산된 점수를 일상 기록 화면(캘린더 · 하루 히스토리)에 날짜별로 함께 보여줌 |
+| ①② → ④ | 답변 · 기록이 생기면 펫에게 경험치 지급 |
+
+**콘텐츠** — 관리자가 만들고, 모든 사용자가 같이 읽음. 어느 덩어리에 쓰이는지로 나눔
+
+```
+[콘텐츠]
+ ├─ 질문 콘텐츠 ──────────────→ ① 질문·답변에 사용
+ │   ├─ 지표 (indicators)            스트레스, 퇴사 충동, 연봉 만족 …
+ │   ├─ 질문 (questions)             "오늘 스트레스는 어느 정도였나요?"
+ │   └─ 선택지 (question_options)     😊 😐 😫 + 보기마다 점수
+ │
+ ├─ 점수 콘텐츠 ──────────────→ ③ 퇴사각 점수에 사용
+ │   └─ 직장인 유형 (worker_types)     "번아웃 직전형" + 판정 조건
+ │
+ ├─ 펫 콘텐츠 ────────────────→ ④ 펫에 사용
+ │   ├─ 펫 종류 (pet_species)
+ │   ├─ 행동 규칙 (pet_state_rules)    "퇴근 시간 지나면 → 퇴근 독촉"
+ │   └─ 대사 (pet_dialogues)          "{닉네임}, 오늘 고생했어"
+ │
+ └─ 운영 콘텐츠 ──────────────→ 전체에 사용
+     └─ 이벤트 (events)
 ```
 
 ### 원칙 3개
@@ -119,7 +146,6 @@ answers, daily_records 변경
 | `pet_interactions` | 클릭·쓰다듬기 기록 | 기록 |
 | `pet_state_rules` | "퇴근 시간 지나면 → 퇴근 독촉" 같은 행동 규칙 | 콘텐츠 |
 | `pet_dialogues` | 펫 대사 | 콘텐츠 |
-| `pet_items`, `user_pet_items` | 장신구 (후순위) | 콘텐츠 / 기록 |
 
 ```
 답변·하루 기록·업무 기록이 생김
@@ -164,7 +190,6 @@ erDiagram
     users ||--o{ user_pets : "보유 펫"
     users ||--o{ exp_events : "경험치"
     users ||--o{ pet_interactions : "인터랙션"
-    users ||--o{ user_pet_items : "보유 장신구"
 
     indicators ||--o{ questions : "지표별 질문"
     indicators ||--o{ score_snapshots : "지표별 점수"
@@ -177,8 +202,6 @@ erDiagram
     pet_species ||--o{ user_pets : "캐릭터 종류"
     user_pets ||--o{ exp_events : "성장"
     user_pets ||--o{ pet_interactions : "클릭/쓰다듬기"
-    user_pets ||--o{ user_pet_items : "장착(후순위)"
-    pet_items ||--o{ user_pet_items : ""
 
     users {
         uuid id PK "= auth.users.id"
@@ -227,8 +250,11 @@ erDiagram
     questions {
         bigint id PK
         bigint indicator_id FK
-        text text
+        text text "원래 질문 의미"
+        text prompt_text "사용자에게 보이는 연출 문구"
         text answer_type "CHOICE | EMOJI | SLIDER | TEXT | YES_NO"
+        text interaction_key "GIFT_BOX | POSTURE | WEATHER | STAMP | BALLOON"
+        jsonb interaction_config "연출 세부 설정"
         real min_value
         real max_value
         text min_label
@@ -242,6 +268,7 @@ erDiagram
         int sort_order
         text label
         text emoji
+        text asset_key "보기 그림"
         real raw_score
     }
     question_deliveries {
@@ -343,19 +370,6 @@ erDiagram
         text interaction_type "CLICK | DRAG | PET | TALK"
         timestamptz occurred_at
     }
-    pet_items {
-        bigint id PK
-        text code UK
-        text name
-        text slot
-        text asset_key
-    }
-    user_pet_items {
-        bigint user_pet_id PK,FK
-        bigint item_id PK,FK
-        uuid user_id FK
-        bool is_equipped
-    }
     user_goals {
         bigint id PK
         uuid user_id FK
@@ -380,7 +394,7 @@ erDiagram
 
 **공통 컬럼 (그림에서는 생략)**
 - 모든 테이블: `created_at timestamptz default now()`, 수정되는 테이블은 `updated_at`
-- 콘텐츠 테이블(`indicators`, `questions`, `question_options`, `worker_types`, `pet_species`, `pet_items`, `pet_state_rules`, `pet_dialogues`, `events`): `updated_by uuid` (수정한 관리자)
+- 콘텐츠 테이블(`indicators`, `questions`, `question_options`, `worker_types`, `pet_species`, `pet_state_rules`, `pet_dialogues`, `events`): `updated_by uuid` (수정한 관리자)
 
 **SQLite → PostgreSQL 타입 변환 규칙**
 
@@ -404,7 +418,7 @@ erDiagram
 | 질문·답변 | `question_deliveries`, `answers` | 노출 주기, 중복 방지, 답변 저장 |
 | 기록 | `daily_records`, `work_logs` | 오전·오후·퇴근 기분, 야근, 메모 3종(암호화), 회의·업무 건수 |
 | 퇴사각 지수 | `score_snapshots`, `worker_types` | 항목별/전체 점수, 기간별 비교, 캘린더 색상, 직장인 유형 |
-| 펫 | `pet_species`, `user_pets`, `exp_events`, `pet_interactions`, `pet_items`(후순위) | 캐릭터 뽑기, 레벨·경험치, 애정도, 장신구 |
+| 펫 | `pet_species`, `user_pets`, `exp_events`, `pet_interactions` | 캐릭터 뽑기, 레벨·경험치, 애정도 |
 | 펫 콘텐츠 | `pet_state_rules`, `pet_dialogues` | 상태 우선순위, 대사 |
 | 이벤트 | `events` | 기간 한정 이벤트 |
 
@@ -437,6 +451,23 @@ erDiagram
 | 자유 입력 | `text_value_enc` (암호화) | **NULL → 점수 계산에서 제외** (나중에 감정분석 붙이면 채움) |
 
 - 지표 `direction = POSITIVE`(성취감·만족도 질문)는 `100 - 값` 으로 뒤집어서 저장 → 전부 "높을수록 퇴사각↑"로 통일
+
+**데이터 형식 vs 연출 — 분리해서 저장**
+- `answer_type` = 답이 **어떤 데이터로 저장되는지** (점수 계산 기준)
+- `interaction_key` = 화면에서 **어떤 연출로 보여주는지** (기획의 "설문 방식")
+- 연출이 달라도 데이터 형식이 같으면 점수 계산은 똑같음
+
+| 설문 방식 (기획) | `interaction_key` | `answer_type` | 저장 |
+| --- | --- | --- | --- |
+| 선물 상자 열기 → 쓸모 있음 / 그럭저럭 / 귀중품 | `GIFT_BOX` | `CHOICE` | 고른 보기의 `raw_score` |
+| 회의할 때 내 모습 고르기 | `POSTURE` | `CHOICE` | 고른 보기의 `raw_score` |
+| 우리 회사의 날씨 → 맑음 / 구름 / 폭풍 | `WEATHER` | `CHOICE` | 고른 보기의 `raw_score` |
+| 충동만큼 사직서에 도장 찍기 | `STAMP` | `SLIDER` | 찍은 횟수 → `raw_value` |
+| 스트레스만큼 풍선 크게 불기 | `BALLOON` | `SLIDER` | 풍선 크기 → `raw_value` |
+
+- 관리자는 **앱에 이미 만들어진 연출 중에서 골라** 질문에 붙일 수 있음 (예: 날씨 질문을 선물 상자 연출로 변경)
+- **새 연출(미니게임) 추가는 앱 코드 개발 + 앱 업데이트 필요** → 앱은 `interaction_key` 를 모르면 기본 연출(일반 보기 / 슬라이더)로 표시
+- 처음 질문 데이터는 개발 시 seed(SQL)로 넣고, 이후 수정·추가는 관리자 웹에서
 
 ### ③ 퇴사각 지수 계산 · 미응답 처리 — DB 함수 (제안안, 팀 확정 필요)
 - 계산은 **DB 함수 `recalc_scores(user_id)`** 에서만 함. 앱은 `score_snapshots` 를 읽기만 가능
@@ -493,7 +524,7 @@ erDiagram
 | `work_logs` | 본인 직접 추가·수정·삭제 (경험치·dirty 는 트리거) | 관리자 함수로만 |
 | `score_snapshots`, `exp_events` | 본인 **읽기만** | 관리자 함수로만 |
 | `user_pets` | 본인 읽기, `name` · `is_active` 만 수정 | 관리자 함수로만 |
-| `pet_interactions`, `user_pet_items` | 본인 추가·읽기, 장착 여부 수정 | 관리자 함수로만 |
+| `pet_interactions` | 본인 추가·읽기 | 관리자 함수로만 |
 | `admin_users`, `admin_audit_logs` | 접근 불가 | `SUPER` 만 (감사 로그는 추가만, 수정·삭제 불가) |
 
 ### ⑧ 메모 · 자유 입력 암호화
@@ -513,7 +544,7 @@ erDiagram
 
 | 권한 | 할 수 있는 일 |
 | --- | --- |
-| `CONTENT` | 질문·대사·아이템·펫 종류·이벤트 수정 |
+| `CONTENT` | 질문·대사·펫 종류·이벤트 수정 |
 | `SUPPORT` | 계정 조회·정지, 개인 기록 열람·수정 (문의 대응) |
 | `SUPER` | 전부 + 관리자 임명, 감사 로그 열람 |
 
@@ -560,7 +591,7 @@ erDiagram
 | 4. 일상 기록 | `daily_records`, `work_logs` | 구조가 단순함. 암호화가 처음 나옴 |
 | 5. 점수 | `score_snapshots`, `worker_types` | 3·4단계의 결과물. 캐시와 dirty 개념 |
 | 6. 펫 | `pet_species` → `user_pets` → `exp_events` → `pet_interactions` | 기록이 경험치가 되는 흐름. 장부(역분개) 개념 |
-| 7. 펫 콘텐츠 | `pet_state_rules`, `pet_dialogues`, `pet_items`, `user_pet_items` | 다른 표와 연결이 적어서 따로 봐도 됨 |
+| 7. 펫 콘텐츠 | `pet_state_rules`, `pet_dialogues` | 다른 표와 연결이 적어서 따로 봐도 됨 |
 | 8. 관리자 | `admin_users`, `admin_audit_logs` | 앞의 모든 표에 "누가 어떻게 접근하나" |
 | 9. 나머지 | `events`, `user_goals` | 후순위 기능 |
 
@@ -625,8 +656,11 @@ indicators (지표)        "스트레스"
 | 컬럼 | 뜻 | 예시 |
 | --- | --- | --- |
 | `indicator_id` | 어느 지표의 질문인지 | → `indicators.id` |
-| `text` | 질문 문장 | "오늘 스트레스는 어느 정도였나요?" |
-| `answer_type` | 답변 형식 | `CHOICE`(5지선다) · `EMOJI` · `SLIDER` · `YES_NO` · `TEXT`(자유 입력) |
+| `text` | 원래 질문 의미 (통계 · 관리 화면용) | "현재 회사의 복지 제도가 내 생활에 실질적으로 도움이 되나요?" |
+| `prompt_text` | 사용자에게 보이는 **연출 문구** | "선물 상자 열었더니? 나온 선물은…" |
+| `answer_type` | 답이 저장되는 **데이터 형식** | `CHOICE`(n지선다) · `EMOJI` · `SLIDER` · `YES_NO` · `TEXT`(자유 입력) |
+| `interaction_key` | 화면에서 보여줄 **연출** | `GIFT_BOX`(선물 상자) · `POSTURE`(회의 자세) · `WEATHER`(회사 날씨) · `STAMP`(사직서 도장) · `BALLOON`(풍선 불기) |
+| `interaction_config` | 연출 세부 설정 (`jsonb`) | `{"max_stamps": 10}` = 도장 최대 10번 |
 | `min_value` / `max_value` | 원점수 범위 | 슬라이더 0~10 |
 | `min_label` / `max_label` | 양 끝 설명 | "전혀 아니다" / "매우 그렇다" |
 | `version` | 문구 버전 | 문구를 고치면 +1 |
@@ -635,6 +669,9 @@ indicators (지표)        "스트레스"
 **포인트**
 - **`version` 이 있는 이유**: "스트레스 받았나요?" → "많이 힘들었나요?" 로 고치면 같은 점수라도 의미가 달라짐. 답변이 어느 버전에 대한 것인지 알기 위함 (3단계 `question_version` 과 짝)
 - `min_value` / `max_value` 는 0~100점으로 바꿀 때 기준이 됨
+- **`text` 와 `prompt_text` 를 나누는 이유**: 사용자는 "선물 상자 열었더니?" 같은 재미있는 문구를 보지만, 관리자 · 통계에서는 "복지 만족도 질문" 이라는 원래 의미를 알아야 함
+- **`answer_type` 과 `interaction_key` 를 나누는 이유**: 연출(도장 찍기)과 데이터(0~10 숫자)를 분리 → 연출을 바꿔도 점수 계산은 그대로
+- 관리자는 이미 앱에 있는 연출 중에서만 고를 수 있음. 새 연출은 앱 개발 필요
 
 #### `question_options` — 선택지
 **한 줄 요약**: 객관식 · 이모지 질문의 **보기 목록.** 보기마다 점수를 가짐.
@@ -645,6 +682,7 @@ indicators (지표)        "스트레스"
 | `sort_order` | 보기 순서 | 1, 2, 3, 4, 5 |
 | `label` | 보기 글자 | "매우 힘들었다" |
 | `emoji` | 이모지 (이모지형일 때) | 😫 |
+| `asset_key` | 보기마다 붙는 그림 | `weather_sunny`, `weather_storm`, `gift_treasure` |
 | `raw_score` | 이 보기를 고르면 받는 원점수 | 5 |
 
 **포인트**
@@ -889,18 +927,6 @@ pet_species (펫 종류: 고양이, 강아지 ...)
 | `weight` | 랜덤으로 뽑힐 확률 비중 | 2 = 다른 대사보다 두 배 자주 |
 | `is_active` | 사용 중인지 | |
 
-#### `pet_items` / `user_pet_items` — 장신구 (후순위)
-**한 줄 요약**: 펫에게 씌울 **아이템 목록**(콘텐츠) / 내 펫이 **가진 · 장착한 아이템.**
-
-| 표 | 컬럼 | 뜻 |
-| --- | --- | --- |
-| `pet_items` | `code` / `name` | 고유 이름 / 화면 이름 (밀짚모자) |
-| | `slot` | 장착 부위 `HEAD` · `BODY` |
-| | `asset_key` | 그림 파일 이름 |
-| `user_pet_items` | `user_pet_id` + `item_id` | 어느 펫이 어떤 아이템을 가졌나 (둘을 합쳐서 기본키 → 같은 아이템 중복 보유 불가) |
-| | `user_id` | 주인 (RLS 용) |
-| | `is_equipped` | 지금 장착 중인지 |
-
 ---
 
 ### 8단계 — 관리자
@@ -942,7 +968,7 @@ pet_species (펫 종류: 고양이, 강아지 ...)
 | --- | --- | --- |
 | `code` / `name` | 고유 이름 / 화면 이름 | `FRIDAY_2026_11` / 불금 이벤트 |
 | `starts_at` / `ends_at` | 시작 · 끝 시각 | |
-| `config` | 이벤트 내용 | `{"bonus_exp":2,"item":"PARTY_HAT"}` = 경험치 2배 + 파티 모자 |
+| `config` | 이벤트 내용 | `{"bonus_exp":2}` = 경험치 2배 |
 | `is_active` | 사용 중인지 | |
 
 #### `user_goals` — 사용자 목표 (후순위)
