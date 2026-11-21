@@ -24,7 +24,6 @@ pet/
    │  ├─ 00-supabase-구조.md          # Supabase 기초 (auth / public, API, RLS, 인덱스)
    │  └─ 01 ~ 08-*.md               # 테이블별 설계 (users, questions, question_deliveries,
    │                                #   answers, balls, ghosts, intimacy_logs, settings)
-   ├─ schema.sql                    # 초기 DB 스키마 (이전 기획 기준, erd/ 설계로 대체 예정)
    └─ legacy/                       # 이전 기획 기준 문서 (참고용)
       ├─ ERD.md                     # 이전 DB 관계도, 권한(RLS), DB 함수 · 트리거
       └─ 화면-구슬병.md               # 이전 캘린더 · 대시보드 화면 안 (구슬병)
@@ -47,7 +46,6 @@ pet/
 | [docs/erd/ERD.md](docs/erd/ERD.md) | **DB 설계 기준 문서.** 테이블 8개의 관계도 · DB 함수 · 트리거 · 아직 정해지지 않은 값 |
 | [docs/erd/00-진행현황.md](docs/erd/00-진행현황.md) | 테이블별 설계 문서 목록과 진행 상태 |
 | [docs/기술스택.md](docs/기술스택.md) | 언어 · 프레임워크 · DB 선택 이유 |
-| [docs/schema.sql](docs/schema.sql) | 초기 DB 스키마 (이전 기획 기준, `docs/erd/` 설계로 대체 예정) |
 
 > [!WARNING]
 > 기획정리_추가정리필요요소.md 의 ✅ 결정은 ERD 설계를 위한 임시 결정
